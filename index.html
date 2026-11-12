@@ -1,0 +1,301 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IB Evening Revision Newspaper</title>
+<style>
+body {
+  margin: 0;
+  background: #edf0ee;
+  color: #26333a;
+  font-family: Georgia, serif;
+}
+header {
+  background: #284b63;
+  color: white;
+  text-align: center;
+  padding: 35px 15px;
+}
+header h1 { font-size: 38px; }
+main {
+  max-width: 900px;
+  margin: 25px auto;
+  padding: 15px;
+}
+.card {
+  background: white;
+  padding: 22px;
+  margin-bottom: 20px;
+  border-radius: 10px;
+}
+input, textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  margin: 8px 0 15px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+textarea {
+  height: 230px;
+  font-family: monospace;
+}
+button {
+  padding: 11px 16px;
+  margin: 4px;
+  border: 0;
+  border-radius: 5px;
+  background: #284b63;
+  color: white;
+  cursor: pointer;
+}
+button:hover { background: #416b83; }
+.edition {
+  border-bottom: 1px solid #ddd;
+  padding: 12px 0;
+}
+#preview {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#preview h2 { color: #284b63; }
+#preview iframe {
+  width: 100%;
+  min-height: 700px;
+  border: 0;
+}
+@media print {
+  header, .editor, .archive, .actions { display:none; }
+  body { background:white; }
+  main { margin:0; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>IB Evening Revision Newspaper</h1>
+  <p>Six subjects · One focused hour</p>
+  <p>IB Diploma Programme · Year 1</p>
+</header>
+
+<main>
+
+<section class="card editor">
+  <h2>Today's Edition</h2>
+
+  <label>Edition headline</label>
+  <input id="title" placeholder="Edition 002">
+
+  <label>Date</label>
+  <input id="date" type="date">
+
+  <label>Paste today's newspaper HTML</label>
+  <textarea id="content"
+    placeholder="Paste your daily newspaper content here..."></textarea>
+
+  <button onclick="saveEdition()">Save Edition</button>
+  <button onclick="clearEditor()">Clear</button>
+</section>
+
+<section class="card actions">
+  <h2>Read Your Newspaper</h2>
+  <button onclick="downloadEdition()">Download HTML</button>
+  <button onclick="window.print()">Print / Save PDF</button>
+</section>
+
+<section class="card">
+  <h2 id="paperTitle">Welcome to your newspaper</h2>
+  <p id="paperDate"></p>
+  <div id="preview">
+    <p>Your daily revision edition will appear here.</p>
+  </div>
+</section>
+
+<section class="card archive">
+  <h2>Previous Editions</h2>
+  <div id="archive"></div>
+</section>
+
+</main>
+
+<script>
+const KEY = "ibNewspaperArchive";
+
+let editions = JSON.parse(
+  localStorage.getItem(KEY) || "[]"
+);
+
+let current = null;
+
+function saveStorage() {
+  localStorage.setItem(KEY, JSON.stringify(editions));
+}
+
+function cleanHTML(html) {
+  const doc = new DOMParser().parseFromString(
+    html, "text/html"
+  );
+
+  doc.querySelectorAll(
+    "script,iframe,object,embed,form"
+  ).forEach(el => el.remove());
+
+  doc.querySelectorAll("*").forEach(el => {
+    [...el.attributes].forEach(attr => {
+      if (
+        attr.name.startsWith("on") ||
+        (attr.name === "href" &&
+        /^\s*javascript:/i.test(attr.value))
+      ) el.removeAttribute(attr.name);
+    });
+  });
+
+  return doc.body.innerHTML;
+}
+
+function saveEdition() {
+  const title = document.getElementById("title").value;
+  const date = document.getElementById("date").value;
+  const raw = document.getElementById("content").value;
+
+  if (!title || !date || !raw) {
+    alert("Please complete all fields.");
+    return;
+  }
+
+  const edition = {
+    id: current || Date.now().toString(),
+    title,
+    date,
+    content: cleanHTML(raw)
+  };
+
+  const index = editions.findIndex(
+    e => e.id === edition.id
+  );
+
+  if (index >= 0) editions[index] = edition;
+  else editions.push(edition);
+
+  current = edition.id;
+  saveStorage();
+  showEdition(edition);
+  showArchive();
+}
+
+function showEdition(e) {
+  current = e.id;
+  document.getElementById("paperTitle").textContent =
+    e.title;
+  document.getElementById("paperDate").textContent =
+    e.date;
+  document.getElementById("preview").innerHTML =
+    e.content;
+
+  document.getElementById("title").value = e.title;
+  document.getElementById("date").value = e.date;
+  document.getElementById("content").value = e.content;
+}
+
+function showArchive() {
+  const archive = document.getElementById("archive");
+  archive.innerHTML = "";
+
+  [...editions]
+    .sort((a,b) => b.date.localeCompare(a.date))
+    .forEach(e => {
+      const div = document.createElement("div");
+      div.className = "edition";
+
+      const heading = document.createElement("strong");
+      heading.textContent = e.title + " — " + e.date;
+
+      const open = document.createElement("button");
+      open.textContent = "Open";
+      open.onclick = () => showEdition(e);
+
+      const remove = document.createElement("button");
+      remove.textContent = "Delete";
+      remove.onclick = () => {
+        if (!confirm("Delete this edition?")) return;
+        editions = editions.filter(x => x.id !== e.id);
+        saveStorage();
+        showArchive();
+      };
+
+      div.append(heading, open, remove);
+      archive.appendChild(div);
+    });
+
+  if (!editions.length) {
+    archive.textContent = "No previous editions yet.";
+  }
+}
+
+function downloadEdition() {
+  if (!current) {
+    alert("Save or open an edition first.");
+    return;
+  }
+
+  const e = editions.find(x => x.id === current);
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${e.title}</title>
+<style>
+body {
+ max-width:850px;
+ margin:30px auto;
+ padding:20px;
+ font:16px/1.6 Georgia,serif;
+}
+h2,h3 { color:#284b63; }
+</style>
+</head>
+<body>
+<h1>${e.title}</h1>
+<p>${e.date}</p>
+${e.content}
+</body>
+</html>`;
+
+  const blob = new Blob([html], {
+    type:"text/html"
+  });
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "IB-Newspaper-" + e.date + ".html";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function clearEditor() {
+  current = null;
+  document.getElementById("title").value = "";
+  document.getElementById("content").value = "";
+  document.getElementById("date").value =
+    new Date().toISOString().slice(0,10);
+}
+
+document.getElementById("date").value =
+  new Date().toISOString().slice(0,10);
+
+showArchive();
+
+if (editions.length) {
+  const latest = [...editions].sort(
+    (a,b) => b.date.localeCompare(a.date)
+  )[0];
+  showEdition(latest);
+}
+</script>
+
+</body>
+</html>
